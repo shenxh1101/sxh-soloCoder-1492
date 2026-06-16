@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>装修公司预算与施工进度看板</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="logo-icon">🏗️</span>
+        <span class="logo-text">装修管理看板</span>
+      </div>
+      <nav class="nav-menu">
+        <div class="nav-item active" data-page="project">
+          <span class="nav-icon">📋</span>
+          <span>项目管理</span>
+        </div>
+        <div class="nav-item" data-page="budget">
+          <span class="nav-icon">💰</span>
+          <span>材料预算</span>
+        </div>
+        <div class="nav-item" data-page="progress">
+          <span class="nav-icon">📊</span>
+          <span>施工进度</span>
+        </div>
+        <div class="nav-item" data-page="comparison">
+          <span class="nav-icon">📈</span>
+          <span>对比分析</span>
+        </div>
+        <div class="nav-item" data-page="supplier">
+          <span class="nav-icon">🏪</span>
+          <span>供应商管理</span>
+        </div>
+        <div class="nav-item" data-page="export">
+          <span class="nav-icon">📤</span>
+          <span>导出中心</span>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        v1.0.0 | 本地数据存储
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 id="page-title">项目管理</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="project-info" id="project-info-bar" style="display: none;">
+            <span class="project-name" id="topbar-project-name">-</span>
+            <span class="project-area" id="topbar-project-area">-</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <section class="page active" id="page-project">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">创建装修项目</h2>
+            </div>
+            <div class="house-types" id="house-types"></div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">项目名称</label>
+                <input type="text" class="form-input" id="project-name" placeholder="请输入项目名称">
+              </div>
+              <div class="form-group">
+                <label class="form-label">业主姓名</label>
+                <input type="text" class="form-input" id="owner-name" placeholder="请输入业主姓名">
+              </div>
+              <div class="form-group">
+                <label class="form-label">联系电话</label>
+                <input type="tel" class="form-input" id="owner-phone" placeholder="请输入联系电话">
+              </div>
+              <div class="form-group">
+                <label class="form-label">开工日期</label>
+                <input type="date" class="form-input" id="start-date">
+              </div>
+            </div>
+            <div style="margin-top: 20px;">
+              <button class="btn btn-accent" id="create-project-btn">
+                🚀 创建项目
+              </button>
+              <button class="btn btn-outline" id="clear-data-btn" style="margin-left: 12px;">
+                🗑️ 清空数据
+              </button>
+            </div>
+          </div>
+
+          <div class="card" id="floor-plan-card" style="display: none;">
+            <div class="card-header">
+              <h2 class="card-title">户型平面图</h2>
+            </div>
+            <div class="floor-plan-container">
+              <svg class="floor-plan" id="floor-plan-svg" viewBox="0 0 600 400"></svg>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="page-budget">
+          <div class="budget-layout">
+            <div class="material-library">
+              <div class="card-header" style="margin-bottom: 20px;">
+                <h2 class="card-title">材料库</h2>
+                <button class="btn btn-outline btn-sm" id="add-custom-item-btn">
+                  ➕ 添加自定义项目
+                </button>
+              </div>
+              <div id="material-categories"></div>
+            </div>
+            <div>
+              <div class="budget-panel" id="budget-panel">
+                <h3>💰 预算汇总</h3>
+                <div class="budget-item">
+                  <span class="budget-item-label">材料费</span>
+                  <span class="budget-item-value" id="budget-material">¥0.00</span>
+                </div>
+                <div class="budget-item">
+                  <span class="budget-item-label">人工费</span>
+                  <span class="budget-item-value" id="budget-labor">¥0.00</span>
+                </div>
+                <div class="budget-item">
+                  <span class="budget-item-label">自定义项目</span>
+                  <span class="budget-item-value" id="budget-custom">¥0.00</span>
+                </div>
+                <div class="budget-total">
+                  <div class="budget-item">
+                    <span class="budget-item-label">总预算</span>
+                    <span class="budget-item-value" id="budget-total">¥0.00</span>
+                  </div>
+                </div>
+                <div class="materials-list" id="materials-list"></div>
+              </div>
+              <div class="budget-panel" style="margin-top: 20px;">
+                <h3>📝 自定义项目</h3>
+                <div id="custom-items-list"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="page-progress">
+          <div class="summary-cards" id="progress-summary"></div>
+          <div class="timeline" id="stages-timeline"></div>
+        </section>
+
+        <section class="page" id="page-comparison">
+          <div class="summary-cards" id="comparison-summary"></div>
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">预算与实际支出对比表</h2>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="comparison-table" id="comparison-table">
+                <thead>
+                  <tr>
+                    <th>类别</th>
+                    <th>项目名称</th>
+                    <th>规格/区域</th>
+                    <th>数量</th>
+                    <th>单位</th>
+                    <th>预算金额</th>
+                    <th>实际支出</th>
+                    <th>差额</th>
+                  </tr>
+                </thead>
+                <tbody id="comparison-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="page-supplier">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">供应商管理</h2>
+            </div>
+            <div class="suppliers-grid" id="suppliers-grid"></div>
+          </div>
+        </section>
+
+        <section class="page" id="page-export">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">导出中心</h2>
+            </div>
+            <div class="export-buttons">
+              <div class="export-card" id="export-excel-btn">
+                <div class="export-icon">📊</div>
+                <div class="export-title">导出预算清单</div>
+                <div class="export-desc">导出Excel格式的预算清单，包含材料清单、自定义项目和预算汇总</div>
+                <button class="btn btn-primary">导出 Excel</button>
+              </div>
+              <div class="export-card" id="export-progress-btn">
+                <div class="export-icon">📋</div>
+                <div class="export-title">导出施工进度报告</div>
+                <div class="export-desc">导出HTML格式的施工进度报告，包含所有阶段详情和现场照片</div>
+                <button class="btn btn-accent">导出 HTML</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="material-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>设置材料用量</h2>
+        <button class="modal-close" onclick="App.closeModal('material-modal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">材料名称</label>
+          <input type="text" class="form-input" id="modal-material-name" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">使用区域</label>
+          <input type="text" class="form-input" id="modal-area-name" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">单价</label>
+          <input type="text" class="form-input" id="modal-unit-price" readonly>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">使用数量</label>
+            <input type="number" class="form-input" id="modal-quantity" min="0.01" step="0.01" value="1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">单位</label>
+            <input type="text" class="form-input" id="modal-unit" readonly>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">预算金额</label>
+          <input type="text" class="form-input" id="modal-budget-cost" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">实际支出（可选，默认与预算相同）</label>
+          <input type="number" class="form-input" id="modal-actual-cost" min="0" step="0.01" placeholder="请输入实际支出">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="App.closeModal('material-modal')">取消</button>
+        <button class="btn btn-accent" id="modal-confirm-btn">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="custom-item-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>添加自定义项目</h2>
+        <button class="modal-close" onclick="App.closeModal('custom-item-modal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">项目名称</label>
+          <input type="text" class="form-input" id="custom-item-name" placeholder="例如：拆墙、垃圾清运">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">预算金额（元）</label>
+            <input type="number" class="form-input" id="custom-item-budget" min="0" step="0.01" placeholder="请输入预算金额">
+          </div>
+          <div class="form-group">
+            <label class="form-label">实际支出（元）</label>
+            <input type="number" class="form-input" id="custom-item-actual" min="0" step="0.01" placeholder="可选，默认与预算相同">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">备注</label>
+          <textarea class="form-input" id="custom-item-remark" rows="3" placeholder="请输入备注信息"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="App.closeModal('custom-item-modal')">取消</button>
+        <button class="btn btn-accent" id="custom-item-confirm-btn">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="stage-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="stage-modal-title">编辑阶段信息</h2>
+        <button class="modal-close" onclick="App.closeModal('stage-modal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">实际开始日期</label>
+            <input type="date" class="form-input" id="stage-start-date">
+          </div>
+          <div class="form-group">
+            <label class="form-label">实际结束日期</label>
+            <input type="date" class="form-input" id="stage-end-date">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">完成百分比：<span id="completion-value">0</span>%</label>
+          <input type="range" class="form-input" id="stage-completion" min="0" max="100" value="0" style="padding: 0;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">现场照片（最多3张）</label>
+          <div class="photo-upload-area" id="stage-photos-area"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="App.closeModal('stage-modal')">取消</button>
+        <button class="btn btn-accent" id="stage-confirm-btn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="supplier-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>编辑供应商信息</h2>
+        <button class="modal-close" onclick="App.closeModal('supplier-modal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">对应材料</label>
+          <input type="text" class="form-input" id="supplier-material" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">供应商名称</label>
+          <input type="text" class="form-input" id="supplier-name" placeholder="请输入供应商名称">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">联系人</label>
+            <input type="text" class="form-input" id="supplier-contact" placeholder="请输入联系人姓名">
+          </div>
+          <div class="form-group">
+            <label class="form-label">联系电话</label>
+            <input type="tel" class="form-input" id="supplier-phone" placeholder="请输入联系电话">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">地址</label>
+          <input type="text" class="form-input" id="supplier-address" placeholder="请输入地址">
+        </div>
+        <div class="form-group">
+          <label class="form-label">备注</label>
+          <textarea class="form-input" id="supplier-remark" rows="3" placeholder="请输入备注信息"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="App.closeModal('supplier-modal')">取消</button>
+        <button class="btn btn-accent" id="supplier-confirm-btn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="image-modal" id="image-modal" style="display: none;">
+    <img id="modal-image" src="" alt="预览图片">
+  </div>
+
+  <input type="file" id="photo-input" accept="image/*" style="display: none;">
+
+  <script src="js/data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/calculator.js"></script>
+  <script src="js/drag.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
