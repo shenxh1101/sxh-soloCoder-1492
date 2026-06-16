@@ -8,13 +8,18 @@ const App = {
     tempAreaId: null,
     tempStage: null,
     tempPhotos: [],
-    tempSupplier: null
+    tempSupplier: null,
+    progressView: 'card',
+    cloneSourceProjectId: null
   },
 
   init() {
     this.renderHouseTypes();
     this.setupEventListeners();
-    this.checkExistingProject();
+    this.loadAndInitProject();
+    this.renderProjectList();
+    this.renderProjectSelector();
+    this.updateNoProjectHints();
     DragManager.init();
     DragManager.onDrop((areaId, material) => this.handleMaterialDrop(areaId, material));
   },
@@ -24,26 +29,71 @@ const App = {
       item.addEventListener('click', () => this.navigateTo(item.dataset.page));
     });
 
-    document.getElementById('create-project-btn').addEventListener('click', () => this.createProject());
-    document.getElementById('clear-data-btn').addEventListener('click', () => this.clearAllData());
+    const elCreate = document.getElementById('create-project-btn');
+    if (elCreate) elCreate.addEventListener('click', () => this.createProject());
+    const elClear = document.getElementById('clear-data-btn');
+    if (elClear) elClear.addEventListener('click', () => this.clearAllData());
 
-    document.getElementById('modal-quantity').addEventListener('input', (e) => this.updateModalBudget());
-    document.getElementById('modal-confirm-btn').addEventListener('click', () => this.confirmMaterialAdd());
-    document.getElementById('add-custom-item-btn').addEventListener('click', () => this.openCustomItemModal());
-    document.getElementById('custom-item-confirm-btn').addEventListener('click', () => this.confirmCustomItem());
-    document.getElementById('stage-completion').addEventListener('input', (e) => {
-      document.getElementById('completion-value').textContent = e.target.value;
+    const elModalQty = document.getElementById('modal-quantity');
+    if (elModalQty) elModalQty.addEventListener('input', (e) => this.updateModalBudget());
+    const elModalConfirm = document.getElementById('modal-confirm-btn');
+    if (elModalConfirm) elModalConfirm.addEventListener('click', () => this.confirmMaterialAdd());
+    const elAddCustom = document.getElementById('add-custom-item-btn');
+    if (elAddCustom) elAddCustom.addEventListener('click', () => this.openCustomItemModal());
+    const elCustomConfirm = document.getElementById('custom-item-confirm-btn');
+    if (elCustomConfirm) elCustomConfirm.addEventListener('click', () => this.confirmCustomItem());
+    const elStageCompletion = document.getElementById('stage-completion');
+    if (elStageCompletion) elStageCompletion.addEventListener('input', (e) => {
+      const v = document.getElementById('completion-value');
+      if (v) v.textContent = e.target.value;
     });
-    document.getElementById('stage-confirm-btn').addEventListener('click', () => this.confirmStageEdit());
-    document.getElementById('supplier-confirm-btn').addEventListener('click', () => this.confirmSupplierEdit());
+    const elStageConfirm = document.getElementById('stage-confirm-btn');
+    if (elStageConfirm) elStageConfirm.addEventListener('click', () => this.confirmStageEdit());
+    const elSupplierConfirm = document.getElementById('supplier-confirm-btn');
+    if (elSupplierConfirm) elSupplierConfirm.addEventListener('click', () => this.confirmSupplierEdit());
 
-    document.getElementById('export-excel-btn').addEventListener('click', () => this.exportExcel());
-    document.getElementById('export-progress-btn').addEventListener('click', () => this.exportProgress());
+    const elExportExcel = document.getElementById('export-excel-btn');
+    if (elExportExcel) elExportExcel.addEventListener('click', () => this.exportExcel());
+    const elExportProgress = document.getElementById('export-progress-btn');
+    if (elExportProgress) elExportProgress.addEventListener('click', () => this.exportProgress());
+    const elExportSupplier = document.getElementById('export-supplier-btn') || document.getElementById('export-contacts-btn');
+    if (elExportSupplier) elExportSupplier.addEventListener('click', () => this.exportSupplierContacts());
+    const elExportAll = document.getElementById('export-all-btn');
+    if (elExportAll) elExportAll.addEventListener('click', () => this.exportAll());
 
-    document.getElementById('photo-input').addEventListener('change', (e) => this.handlePhotoUpload(e));
+    const elPhotoInput = document.getElementById('photo-input');
+    if (elPhotoInput) elPhotoInput.addEventListener('change', (e) => this.handlePhotoUpload(e));
 
-    document.getElementById('image-modal').addEventListener('click', () => {
-      document.getElementById('image-modal').style.display = 'none';
+    const elImgModal = document.getElementById('image-modal');
+    if (elImgModal) elImgModal.addEventListener('click', () => {
+      elImgModal.style.display = 'none';
+    });
+
+    const elUndo = document.getElementById('undo-btn');
+    if (elUndo) elUndo.addEventListener('click', () => this.handleUndo());
+
+    const elViewCard = document.getElementById('view-card-btn') || document.getElementById('view-cards');
+    if (elViewCard) elViewCard.addEventListener('click', () => this.switchProgressView('card'));
+    const elViewTimeline = document.getElementById('view-timeline-btn') || document.getElementById('view-timeline');
+    if (elViewTimeline) elViewTimeline.addEventListener('click', () => this.switchProgressView('timeline'));
+
+    const elProjectSelector = document.getElementById('project-selector');
+    if (elProjectSelector) elProjectSelector.addEventListener('change', (e) => {
+      if (e.target.value) {
+        this.switchProject(e.target.value);
+      }
+    });
+
+    const elCloneConfirm = document.getElementById('clone-confirm-btn');
+    if (elCloneConfirm) elCloneConfirm.addEventListener('click', () => this.confirmCloneProject());
+    const elCloneCancel = document.getElementById('clone-cancel-btn');
+    if (elCloneCancel) elCloneCancel.addEventListener('click', () => this.closeModal('clone-project-modal'));
+
+    document.querySelectorAll('.modal-close').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const modal = btn.closest('.modal-overlay');
+        if (modal) modal.classList.remove('active');
+      });
     });
 
     document.addEventListener('keydown', (e) => {
@@ -51,7 +101,16 @@ const App = {
         document.querySelectorAll('.modal-overlay.active').forEach(modal => {
           modal.classList.remove('active');
         });
-        document.getElementById('image-modal').style.display = 'none';
+        const imgModal = document.getElementById('image-modal');
+        if (imgModal) imgModal.style.display = 'none';
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        this.handleUndo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (this.state.currentPage === 'budget') this.exportExcel();
       }
     });
   },
@@ -77,19 +136,50 @@ const App = {
     };
     document.getElementById('page-title').textContent = titles[page] || '';
 
+    this.updateNoProjectHints();
+
+    if (!this.state.currentProject && page !== 'project') {
+      return;
+    }
+
     if (page === 'budget') {
       this.renderMaterialLibrary();
       this.renderBudgetPanel();
       this.renderCustomItems();
     } else if (page === 'progress') {
       this.renderProgressSummary();
-      this.renderStagesTimeline();
+      if (this.state.progressView === 'card') {
+        this.renderStagesTimeline();
+      } else {
+        this.renderTimelineView();
+      }
+      this.updateViewToggle();
     } else if (page === 'comparison') {
       this.renderComparisonSummary();
       this.renderComparisonTable();
     } else if (page === 'supplier') {
       this.renderSuppliers();
+    } else if (page === 'project') {
+      this.renderProjectList();
     }
+  },
+
+  updateNoProjectHints() {
+    const pagesWithHint = ['budget', 'progress', 'comparison', 'supplier', 'export'];
+    pagesWithHint.forEach(page => {
+      const pageEl = document.getElementById(`page-${page}`);
+      if (!pageEl) return;
+      const hint = pageEl.querySelector('.no-project-hint');
+      const mainContent = pageEl.querySelector('.page-main-content');
+      if (!hint || !mainContent) return;
+      if (!this.state.currentProject) {
+        hint.style.display = 'block';
+        mainContent.style.display = 'none';
+      } else {
+        hint.style.display = 'none';
+        mainContent.style.display = 'block';
+      }
+    });
   },
 
   renderHouseTypes() {
@@ -153,9 +243,98 @@ const App = {
     }).join('');
   },
 
+  renderProjectList() {
+    const grid = document.getElementById('projects-grid');
+    const projects = Storage.getProjectList();
+
+    if (projects.length === 0) {
+      grid.innerHTML = `
+        <div class="project-card-empty">
+          <div class="icon">📁</div>
+          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--text-secondary);">暂无项目</div>
+          <div style="font-size: 13px;">请在下方选择户型并创建您的第一个装修项目</div>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = projects.map(p => {
+      const isActive = p.id === this.state.currentProject?.id;
+      const house = PRESET_DATA.houseTypes.find(h => h.id === p.houseType);
+      const created = p.createdAt ? new Date(p.createdAt).toLocaleDateString('zh-CN') : '-';
+      return `
+        <div class="project-card ${isActive ? 'active' : ''}" data-project-id="${p.id}">
+          <div class="project-card-icon">🏡</div>
+          <div class="project-card-title">${p.name}</div>
+          <div class="project-card-meta">${house?.name || '未知户型'} · ${p.area || 0} ㎡</div>
+          ${p.ownerName ? `<div class="project-card-meta">👤 ${p.ownerName}${p.ownerPhone ? ' · ' + p.ownerPhone : ''}</div>` : ''}
+          <div class="project-card-meta" style="color: var(--text-muted);">创建于 ${created}</div>
+          <div class="project-card-actions">
+            <button class="btn btn-sm ${isActive ? 'btn-outline' : 'btn-accent'}" data-action="switch" data-project-id="${p.id}" ${isActive ? 'disabled style="opacity:0.6;cursor:not-allowed;"' : ''}>
+              ${isActive ? '✓ 当前' : '🔄 切换'}
+            </button>
+            <button class="btn btn-sm btn-outline" data-action="clone" data-project-id="${p.id}">📋 复制</button>
+            <button class="btn btn-sm btn-danger" data-action="delete" data-project-id="${p.id}">🗑️ 删除</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    grid.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const projectId = btn.dataset.projectId;
+        if (action === 'switch') this.switchProject(projectId);
+        else if (action === 'clone') this.openCloneModal(projectId);
+        else if (action === 'delete') this.deleteProject(projectId);
+      });
+    });
+  },
+
+  renderProjectSelector() {
+    const select = document.getElementById('project-selector');
+    const projects = Storage.getProjectList();
+    const currentId = Storage.getCurrentProjectId();
+
+    if (projects.length === 0) {
+      select.innerHTML = '<option value="">请先创建项目</option>';
+      select.disabled = true;
+      return;
+    }
+
+    select.disabled = false;
+    select.innerHTML = '<option value="">-- 切换项目 --</option>' + projects.map(p => {
+      const isActive = p.id === currentId;
+      return `<option value="${p.id}" ${isActive ? 'selected' : ''}>${isActive ? '★ ' : ''}${p.name}</option>`;
+    }).join('');
+  },
+
+  loadAndInitProject() {
+    const project = Storage.getProject();
+    if (project) {
+      this.state.currentProject = project;
+      this.state.selectedHouseType = project.houseType;
+      this.state.currentHouse = PRESET_DATA.houseTypes.find(h => h.id === project.houseType);
+
+      document.getElementById('project-name').value = project.name;
+      document.getElementById('owner-name').value = project.ownerName || '';
+      document.getElementById('owner-phone').value = project.ownerPhone || '';
+      document.getElementById('start-date').value = project.startDate || '';
+
+      this.renderHouseTypes();
+      this.renderFloorPlan();
+      this.updateProjectInfoBar();
+    } else {
+      this.state.currentProject = null;
+      this.state.selectedHouseType = null;
+      this.state.currentHouse = null;
+    }
+  },
+
   createProject() {
     if (!this.state.selectedHouseType) {
-      alert('请先选择户型');
+      this.showToast('请先选择户型', 'error');
       return;
     }
 
@@ -165,7 +344,7 @@ const App = {
     const startDate = document.getElementById('start-date').value;
 
     if (!name) {
-      alert('请输入项目名称');
+      this.showToast('请输入项目名称', 'error');
       return;
     }
 
@@ -181,7 +360,9 @@ const App = {
       createdAt: new Date().toISOString()
     };
 
+    Storage.setCurrentProjectId(project.id);
     Storage.setProject(project);
+    Storage.addProjectToList(project);
     this.state.currentProject = project;
 
     Storage.initProgress(PRESET_DATA.stages);
@@ -189,25 +370,83 @@ const App = {
 
     this.updateProjectInfoBar();
     this.renderFloorPlan();
-    alert('项目创建成功！');
+    this.renderProjectList();
+    this.renderProjectSelector();
+    this.updateNoProjectHints();
+    this.showToast(`项目「${name}」创建成功！`, 'success');
     this.navigateTo('budget');
   },
 
-  checkExistingProject() {
-    const project = Storage.getProject();
-    if (project) {
-      this.state.currentProject = project;
-      this.state.selectedHouseType = project.houseType;
-      this.state.currentHouse = PRESET_DATA.houseTypes.find(h => h.id === project.houseType);
+  switchProject(projectId) {
+    if (!projectId) return;
+    if (projectId === Storage.getCurrentProjectId()) return;
 
-      document.getElementById('project-name').value = project.name;
-      document.getElementById('owner-name').value = project.ownerName || '';
-      document.getElementById('owner-phone').value = project.ownerPhone || '';
-      document.getElementById('start-date').value = project.startDate || '';
+    Storage.setCurrentProjectId(projectId);
+    this.loadAndInitProject();
+    this.renderProjectList();
+    this.renderProjectSelector();
+    this.updateNoProjectHints();
+    const p = this.state.currentProject;
+    this.showToast(`已切换到项目「${p?.name || ''}」`, 'success');
+    if (this.state.currentPage !== 'project') {
+      this.navigateTo(this.state.currentPage);
+    }
+  },
 
-      this.renderHouseTypes();
-      this.renderFloorPlan();
+  openCloneModal(projectId) {
+    this.state.cloneSourceProjectId = projectId;
+    const p = Storage.getProjectById(projectId);
+    document.getElementById('clone-project-name').value = p ? `${p.name} - 副本` : '';
+    this.openModal('clone-project-modal');
+  },
+
+  confirmCloneProject() {
+    const sourceId = this.state.cloneSourceProjectId;
+    const newName = document.getElementById('clone-project-name').value.trim();
+    if (!newName) {
+      this.showToast('请输入新项目名称', 'error');
+      return;
+    }
+
+    try {
+      const newProject = Storage.cloneProject(sourceId, newName);
+      this.closeModal('clone-project-modal');
+      Storage.setCurrentProjectId(newProject.id);
+      this.loadAndInitProject();
+      this.renderProjectList();
+      this.renderProjectSelector();
+      this.updateNoProjectHints();
+      this.showToast(`已复制项目为「${newName}」并自动切换`, 'success');
+      if (this.state.currentPage !== 'project') {
+        this.navigateTo(this.state.currentPage);
+      }
+    } catch (err) {
+      this.showToast('复制项目失败：' + err.message, 'error');
+    }
+  },
+
+  deleteProject(projectId) {
+    const p = Storage.getProjectById(projectId);
+    const name = p?.name || '该项目';
+    if (!confirm(`确定要删除项目「${name}」吗？\n所有关联的预算、进度、供应商数据将一并删除，此操作不可恢复。`)) {
+      return;
+    }
+
+    try {
+      Storage.deleteProject(projectId);
+      this.loadAndInitProject();
+      this.renderProjectList();
+      this.renderProjectSelector();
       this.updateProjectInfoBar();
+      this.updateNoProjectHints();
+      this.showToast(`项目「${name}」已删除`, 'success');
+      if (this.state.currentPage !== 'project' && !this.state.currentProject) {
+        this.navigateTo('project');
+      } else if (this.state.currentPage !== 'project') {
+        this.navigateTo(this.state.currentPage);
+      }
+    } catch (err) {
+      this.showToast('删除失败：' + err.message, 'error');
     }
   },
 
@@ -223,7 +462,7 @@ const App = {
   },
 
   clearAllData() {
-    if (confirm('确定要清空所有数据吗？此操作不可恢复。')) {
+    if (confirm('确定要清空所有项目数据吗？此操作不可恢复。')) {
       Storage.clearAll();
       this.state.currentProject = null;
       this.state.selectedHouseType = null;
@@ -269,7 +508,8 @@ const App = {
 
   handleMaterialDrop(areaId, material) {
     if (!this.state.currentProject) {
-      alert('请先创建项目');
+      this.showToast('请先创建项目', 'error');
+      this.navigateTo('project');
       return;
     }
 
@@ -300,7 +540,7 @@ const App = {
   confirmMaterialAdd() {
     const quantity = parseFloat(document.getElementById('modal-quantity').value);
     if (!quantity || quantity <= 0) {
-      alert('请输入有效的数量');
+      this.showToast('请输入有效的数量', 'error');
       return;
     }
 
@@ -321,9 +561,33 @@ const App = {
     this.closeModal('material-modal');
     this.renderBudgetPanel();
     this.renderFloorPlan();
+    this.showToast(`已添加材料 ${this.state.tempMaterial.name}`, 'success');
 
     this.state.tempMaterial = null;
     this.state.tempAreaId = null;
+  },
+
+  handleUndo() {
+    if (!this.state.currentProject) {
+      this.showToast('当前没有项目', 'error');
+      return;
+    }
+
+    const result1 = Storage.undoLastAction('usages');
+    if (result1.success) {
+      this.renderBudgetPanel();
+      this.renderFloorPlan();
+      this.showToast('已撤销材料操作：' + (result1.message || ''), 'success');
+      return;
+    }
+    const result2 = Storage.undoLastAction('custom');
+    if (result2.success) {
+      this.renderBudgetPanel();
+      this.renderCustomItems();
+      this.showToast('已撤销自定义项目操作：' + (result2.message || ''), 'success');
+      return;
+    }
+    this.showToast('没有可撤销的操作', 'error');
   },
 
   renderBudgetPanel() {
@@ -349,15 +613,28 @@ const App = {
       const usageDetails = Calculator.getMaterialUsageDetails(usages, materials, this.state.currentHouse.rooms);
       listContainer.innerHTML = `
         <div class="materials-list-title">已选材料 (${usages.length})</div>
-        ${usageDetails.map(u => `
-          <div class="usage-item">
-            <div class="usage-info">
-              <div class="usage-name">${u.materialName}</div>
-              <div class="usage-detail">${u.roomName} · ${u.quantity}${u.unit} · ${Calculator.formatCurrency(u.budgetCost)}</div>
+        ${usageDetails.map(u => {
+          const rooms = this.state.currentHouse.rooms;
+          const roomOptions = rooms.map(r => `<option value="${r.id}" ${r.id === u.areaId ? 'selected' : ''}>${r.name}</option>`).join('');
+          return `
+            <div class="usage-item" data-usage-id="${u.id}">
+              <div class="usage-info">
+                <div class="usage-name">${u.materialName}</div>
+                <div class="usage-edit-row">
+                  <span class="usage-edit-label">数量/房间/支出</span>
+                  <input type="number" min="0" step="0.01" class="usage-edit-input usage-edit-qty" value="${u.quantity}" />
+                  <select class="usage-edit-select usage-edit-room">${roomOptions}</select>
+                  <input type="number" min="0" step="0.01" class="usage-edit-input usage-edit-cost" value="${u.actualCost}" />
+                  <button class="usage-edit-save" data-save-usage="${u.id}">保存</button>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                <div class="usage-detail" style="margin-right:4px;">预算: ${Calculator.formatCurrency(u.budgetCost)}</div>
+                <button class="usage-remove" data-usage-id="${u.id}" title="删除">×</button>
+              </div>
             </div>
-            <button class="usage-remove" data-usage-id="${u.id}" title="删除">×</button>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       `;
 
       listContainer.querySelectorAll('.usage-remove').forEach(btn => {
@@ -366,7 +643,30 @@ const App = {
             Storage.removeMaterialUsage(btn.dataset.usageId);
             this.renderBudgetPanel();
             this.renderFloorPlan();
+            this.showToast('材料已删除', 'success');
           }
+        });
+      });
+
+      listContainer.querySelectorAll('[data-save-usage]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const usageId = btn.dataset.saveUsage;
+          const itemEl = btn.closest('.usage-item');
+          const qty = parseFloat(itemEl.querySelector('.usage-edit-qty').value);
+          const room = itemEl.querySelector('.usage-edit-room').value;
+          const cost = parseFloat(itemEl.querySelector('.usage-edit-cost').value);
+          if (!qty || qty <= 0) {
+            this.showToast('请输入有效的数量', 'error');
+            return;
+          }
+          if (isNaN(cost) || cost < 0) {
+            this.showToast('请输入有效的实际支出', 'error');
+            return;
+          }
+          Storage.updateMaterialUsage(usageId, { quantity: qty, areaId: room, actualCost: cost });
+          this.renderBudgetPanel();
+          this.renderFloorPlan();
+          this.showToast('材料信息已更新', 'success');
         });
       });
     }
@@ -374,7 +674,8 @@ const App = {
 
   openCustomItemModal() {
     if (!this.state.currentProject) {
-      alert('请先创建项目');
+      this.showToast('请先创建项目', 'error');
+      this.navigateTo('project');
       return;
     }
 
@@ -392,11 +693,11 @@ const App = {
     const remark = document.getElementById('custom-item-remark').value.trim();
 
     if (!name) {
-      alert('请输入项目名称');
+      this.showToast('请输入项目名称', 'error');
       return;
     }
-    if (!budgetCost || budgetCost < 0) {
-      alert('请输入有效的预算金额');
+    if (isNaN(budgetCost) || budgetCost < 0) {
+      this.showToast('请输入有效的预算金额', 'error');
       return;
     }
 
@@ -415,6 +716,7 @@ const App = {
     this.closeModal('custom-item-modal');
     this.renderBudgetPanel();
     this.renderCustomItems();
+    this.showToast('自定义项目已添加', 'success');
   },
 
   renderCustomItems() {
@@ -443,6 +745,7 @@ const App = {
           Storage.removeCustomItem(btn.dataset.customId);
           this.renderBudgetPanel();
           this.renderCustomItems();
+          this.showToast('自定义项目已删除', 'success');
         }
       });
     });
@@ -483,8 +786,30 @@ const App = {
     `;
   },
 
+  switchProgressView(view) {
+    this.state.progressView = view;
+    this.updateViewToggle();
+    if (view === 'card') {
+      document.getElementById('stages-timeline').style.display = 'block';
+      document.getElementById('timeline-view').style.display = 'none';
+      this.renderStagesTimeline();
+    } else {
+      document.getElementById('stages-timeline').style.display = 'none';
+      document.getElementById('timeline-view').style.display = 'block';
+      this.renderTimelineView();
+    }
+  },
+
+  updateViewToggle() {
+    const elCard = document.getElementById('view-card-btn') || document.getElementById('view-cards');
+    const elTimeline = document.getElementById('view-timeline-btn') || document.getElementById('view-timeline');
+    if (elCard) elCard.classList.toggle('active', this.state.progressView === 'card');
+    if (elTimeline) elTimeline.classList.toggle('active', this.state.progressView === 'timeline');
+  },
+
   renderStagesTimeline() {
     const container = document.getElementById('stages-timeline');
+    container.style.display = 'block';
     const progress = Storage.getProgress();
 
     container.innerHTML = PRESET_DATA.stages.map(stage => {
@@ -578,6 +903,117 @@ const App = {
     });
   },
 
+  renderTimelineView() {
+    const container = document.getElementById('timeline-view');
+    container.style.display = 'block';
+    const progress = Storage.getProgress();
+    const stages = PRESET_DATA.stages;
+    const maxPlannedDays = Math.max(...stages.map(s => s.plannedDays), 1);
+
+    container.innerHTML = `
+      <div style="display:grid; grid-template-columns: 120px 1fr 160px; gap: 16px; padding: 8px 0; font-size: 11px; color: var(--text-muted); border-bottom: 2px solid var(--border-color); font-weight: 600;">
+        <div>阶段</div>
+        <div style="text-align:center;">计划工期 vs 实际工期</div>
+        <div style="text-align:right;">统计</div>
+      </div>
+    ` + stages.map(stage => {
+      const p = progress.find(pr => pr.stageId === stage.id) || {};
+      const planned = stage.plannedDays;
+      const actual = Calculator.calculateStageDuration(p.actualStartDate, p.actualEndDate);
+      const isOverdue = Calculator.isOverdue(p);
+      const overdueDays = Calculator.getOverdueDays(p);
+
+      let progressDays = actual;
+      let statusText = '未开始';
+      let statusClass = 'pending';
+      let barClass = 'planned';
+
+      if (!p.actualStartDate) {
+        progressDays = 0;
+        statusText = '未开始';
+        statusClass = 'pending';
+      } else if (p.actualEndDate && p.completionPercent === 100) {
+        statusText = '已完成';
+        statusClass = 'completed';
+        barClass = isOverdue ? 'overdue' : 'completed';
+      } else if (p.actualStartDate) {
+        const today = new Date();
+        const start = new Date(p.actualStartDate);
+        const realDays = Math.max(0, Math.floor((today - start) / (1000 * 60 * 60 * 24)) + 1);
+        progressDays = actual > 0 ? actual : realDays;
+        if (isOverdue) {
+          statusText = `进行中（延期${overdueDays}天）`;
+          statusClass = 'overdue';
+          barClass = 'overdue';
+        } else {
+          statusText = '进行中';
+          statusClass = 'in-progress';
+          barClass = 'actual';
+        }
+      }
+
+      const plannedPct = Math.min(100, (planned / maxPlannedDays) * 100);
+      const actualPct = Math.min(100, (progressDays / maxPlannedDays) * 100);
+      const actualLabel = progressDays > 0 ? `${progressDays}天` : '';
+      const plannedLabel = `${planned}天`;
+
+      return `
+        <div class="timeline-row">
+          <div class="timeline-stage">
+            <span class="stage-emoji">${stage.icon}</span>
+            <span>${stage.name}</span>
+          </div>
+          <div>
+            <div class="timeline-bar-wrap" style="margin-bottom: 4px;">
+              <div class="timeline-bar planned" style="width: ${plannedPct}%;">
+                计划${plannedLabel}
+              </div>
+            </div>
+            <div class="timeline-bar-wrap">
+              <div class="timeline-bar ${barClass}" style="width: ${Math.max(2, actualPct)}%;">
+                实际${actualLabel || '-'}
+              </div>
+            </div>
+          </div>
+          <div class="timeline-stats">
+            <div class="stat-row">
+              <span class="stat-label">计划</span>
+              <span class="stat-value">${planned}天</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">实际</span>
+              <span class="stat-value ${isOverdue ? 'overdue' : ''}">${progressDays > 0 ? progressDays + '天' : '-'}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">进度</span>
+              <span class="stat-value">${p.completionPercent || 0}%</span>
+            </div>
+            <span class="status-tag ${statusClass}">${statusText}</span>
+          </div>
+        </div>
+      `;
+    }).join('') + `
+      <div style="display:flex; gap: 16px; margin-top: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; flex-wrap: wrap; font-size: 12px;">
+        <div style="display:flex; align-items:center; gap: 6px;">
+          <span style="display:inline-block; width:20px; height:10px; background: linear-gradient(90deg, #a0aec0, #cbd5e0); border-radius: 4px;"></span>
+          <span>计划工期</span>
+        </div>
+        <div style="display:flex; align-items:center; gap: 6px;">
+          <span style="display:inline-block; width:20px; height:10px; background: linear-gradient(90deg, #38a169, #68d391); border-radius: 4px;"></span>
+          <span>按时完成</span>
+        </div>
+        <div style="display:flex; align-items:center; gap: 6px;">
+          <span style="display:inline-block; width:20px; height:10px; background: linear-gradient(90deg, var(--primary-color), var(--accent-color)); border-radius: 4px;"></span>
+          <span>进行中</span>
+        </div>
+        <div style="display:flex; align-items:center; gap: 6px;">
+          <span style="display:inline-block; width:20px; height:10px; background: linear-gradient(90deg, #e53e3e, #f56565); border-radius: 4px;"></span>
+          <span>延期</span>
+        </div>
+      </div>
+    `;
+  },
+
   openStageEditModal(stageId) {
     const progress = Storage.getProgress();
     const p = progress.find(pr => pr.stageId === stageId);
@@ -640,7 +1076,7 @@ const App = {
     if (!file) return;
 
     if (this.state.tempPhotos.length >= 3) {
-      alert('最多只能上传3张照片');
+      this.showToast('最多只能上传3张照片', 'error');
       return;
     }
 
@@ -659,7 +1095,7 @@ const App = {
     const completion = parseInt(document.getElementById('stage-completion').value);
 
     if (startDate && endDate && startDate > endDate) {
-      alert('结束日期不能早于开始日期');
+      this.showToast('结束日期不能早于开始日期', 'error');
       return;
     }
 
@@ -677,7 +1113,12 @@ const App = {
 
     this.closeModal('stage-modal');
     this.renderProgressSummary();
-    this.renderStagesTimeline();
+    if (this.state.progressView === 'card') {
+      this.renderStagesTimeline();
+    } else {
+      this.renderTimelineView();
+    }
+    this.showToast('阶段信息已更新', 'success');
 
     this.state.tempStage = null;
     this.state.tempPhotos = [];
@@ -859,12 +1300,14 @@ const App = {
 
     this.closeModal('supplier-modal');
     this.renderSuppliers();
+    this.showToast('供应商信息已更新', 'success');
     this.state.tempSupplier = null;
   },
 
   exportExcel() {
     if (!this.state.currentProject) {
-      alert('请先创建项目');
+      this.showToast('请先创建项目', 'error');
+      this.navigateTo('project');
       return;
     }
 
@@ -880,17 +1323,71 @@ const App = {
     );
 
     ExportManager.exportToExcel(project, usages, customItems, materials, rooms, breakdown);
+    this.showToast('预算清单已开始下载', 'success');
   },
 
   exportProgress() {
     if (!this.state.currentProject) {
-      alert('请先创建项目');
+      this.showToast('请先创建项目', 'error');
+      this.navigateTo('project');
       return;
     }
 
     const project = this.state.currentProject;
     const progress = Storage.getProgress();
     ExportManager.exportProgressReport(project, progress, PRESET_DATA.stages);
+    this.showToast('进度报告已开始下载', 'success');
+  },
+
+  exportSupplierContacts() {
+    if (!this.state.currentProject) {
+      this.showToast('请先创建项目', 'error');
+      this.navigateTo('project');
+      return;
+    }
+    const project = this.state.currentProject;
+    const suppliers = Storage.getSuppliers();
+    ExportManager.exportSupplierContacts(project, suppliers);
+    this.showToast('供应商通讯录已开始下载', 'success');
+  },
+
+  async exportAll() {
+    if (!this.state.currentProject) {
+      this.showToast('请先创建项目', 'error');
+      this.navigateTo('project');
+      return;
+    }
+    const project = this.state.currentProject;
+    const usages = Storage.getMaterialUsages();
+    const customItems = Storage.getCustomItems();
+    const materials = PRESET_DATA.materials;
+    const rooms = this.state.currentHouse.rooms;
+    const laborPrice = PRESET_DATA.laborPrice;
+    const breakdown = Calculator.calculateBudgetBreakdown(project, usages, customItems, materials, laborPrice);
+    const progress = Storage.getProgress();
+    const suppliers = Storage.getSuppliers();
+
+    this.showToast('正在打包资料，请稍候...', 'success');
+    try {
+      await ExportManager.exportAllBundle(project, usages, customItems, materials, rooms, breakdown, progress, PRESET_DATA.stages, suppliers);
+    } catch (err) {
+      this.showToast('打包失败：' + (err.message || '未知错误'), 'error');
+    }
+  },
+
+  showToast(message, type = 'info', duration = 2500) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast';
+    if (type === 'success') toast.classList.add('success');
+    else if (type === 'error') toast.classList.add('error');
+    requestAnimationFrame(() => {
+      toast.classList.add('show');
+    });
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, duration);
   },
 
   openModal(modalId) {

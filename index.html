@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
   <div class="app-container">
@@ -44,7 +45,7 @@
         </div>
       </nav>
       <div class="sidebar-footer">
-        v1.0.0 | 本地数据存储
+        v1.1.0 | 多项目支持
       </div>
     </aside>
 
@@ -54,6 +55,9 @@
           <h1 id="page-title">项目管理</h1>
         </div>
         <div class="topbar-right">
+          <div class="project-switcher" id="project-switcher" style="display: none;">
+            <select id="project-selector" class="project-selector"></select>
+          </div>
           <div class="project-info" id="project-info-bar" style="display: none;">
             <span class="project-name" id="topbar-project-name">-</span>
             <span class="project-area" id="topbar-project-area">-</span>
@@ -63,9 +67,22 @@
 
       <div class="content-area">
         <section class="page active" id="page-project">
-          <div class="card">
+          <div class="card" id="project-list-card">
             <div class="card-header">
-              <h2 class="card-title">创建装修项目</h2>
+              <h2 class="card-title">我的装修项目</h2>
+              <button class="btn btn-accent btn-sm" id="show-create-form-btn">
+                ➕ 新建项目
+              </button>
+            </div>
+            <div class="projects-grid" id="projects-grid"></div>
+          </div>
+
+          <div class="card" id="create-project-card" style="display: none;">
+            <div class="card-header">
+              <h2 class="card-title" id="create-project-title">创建装修项目</h2>
+              <button class="btn btn-outline btn-sm" id="hide-create-form-btn">
+                ← 返回列表
+              </button>
             </div>
             <div class="house-types" id="house-types"></div>
             <div class="form-row">
@@ -91,7 +108,7 @@
                 🚀 创建项目
               </button>
               <button class="btn btn-outline" id="clear-data-btn" style="margin-left: 12px;">
-                🗑️ 清空数据
+                🗑️ 清空所有数据
               </button>
             </div>
           </div>
@@ -107,13 +124,24 @@
         </section>
 
         <section class="page" id="page-budget">
-          <div class="budget-layout">
+          <div class="no-project-hint" id="budget-no-project" style="display: none;">
+            <div class="hint-icon">📋</div>
+            <h3>还没有装修项目</h3>
+            <p>请先创建一个装修项目，才能进行材料预算管理</p>
+            <button class="btn btn-accent" onclick="App.navigateTo('project')">去创建项目</button>
+          </div>
+          <div class="budget-layout page-main-content" id="budget-main-content">
             <div class="material-library">
               <div class="card-header" style="margin-bottom: 20px;">
                 <h2 class="card-title">材料库</h2>
-                <button class="btn btn-outline btn-sm" id="add-custom-item-btn">
-                  ➕ 添加自定义项目
-                </button>
+                <div class="action-btns">
+                  <button class="btn btn-outline btn-sm" id="undo-btn" title="撤销最近一次操作">
+                    ↩️ 撤销
+                  </button>
+                  <button class="btn btn-outline btn-sm" id="add-custom-item-btn">
+                    ➕ 自定义项目
+                  </button>
+                </div>
               </div>
               <div id="material-categories"></div>
             </div>
@@ -149,62 +177,116 @@
         </section>
 
         <section class="page" id="page-progress">
-          <div class="summary-cards" id="progress-summary"></div>
-          <div class="timeline" id="stages-timeline"></div>
+          <div class="no-project-hint" id="progress-no-project" style="display: none;">
+            <div class="hint-icon">📋</div>
+            <h3>还没有装修项目</h3>
+            <p>请先创建一个装修项目，才能查看施工进度</p>
+            <button class="btn btn-accent" onclick="App.navigateTo('project')">去创建项目</button>
+          </div>
+          <div id="progress-main-content" class="page-main-content">
+            <div class="summary-cards" id="progress-summary"></div>
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">阶段进度</h2>
+                <div class="view-toggle">
+                  <button class="btn btn-outline btn-sm active" id="view-cards">�️ 卡片</button>
+                  <button class="btn btn-outline btn-sm" id="view-timeline">� 时间线</button>
+                </div>
+              </div>
+              <div class="timeline" id="stages-timeline"></div>
+              <div class="timeline-view" id="timeline-view" style="display: none;"></div>
+            </div>
+          </div>
         </section>
 
         <section class="page" id="page-comparison">
-          <div class="summary-cards" id="comparison-summary"></div>
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">预算与实际支出对比表</h2>
-            </div>
-            <div style="overflow-x: auto;">
-              <table class="comparison-table" id="comparison-table">
-                <thead>
-                  <tr>
-                    <th>类别</th>
-                    <th>项目名称</th>
-                    <th>规格/区域</th>
-                    <th>数量</th>
-                    <th>单位</th>
-                    <th>预算金额</th>
-                    <th>实际支出</th>
-                    <th>差额</th>
-                  </tr>
-                </thead>
-                <tbody id="comparison-table-body"></tbody>
-              </table>
+          <div class="no-project-hint" id="comparison-no-project" style="display: none;">
+            <div class="hint-icon">📋</div>
+            <h3>还没有装修项目</h3>
+            <p>请先创建一个装修项目，才能查看对比分析</p>
+            <button class="btn btn-accent" onclick="App.navigateTo('project')">去创建项目</button>
+          </div>
+          <div id="comparison-main-content" class="page-main-content">
+            <div class="summary-cards" id="comparison-summary"></div>
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">预算与实际支出对比表</h2>
+              </div>
+              <div style="overflow-x: auto;">
+                <table class="comparison-table" id="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>类别</th>
+                      <th>项目名称</th>
+                      <th>规格/区域</th>
+                      <th>数量</th>
+                      <th>单位</th>
+                      <th>预算金额</th>
+                      <th>实际支出</th>
+                      <th>差额</th>
+                    </tr>
+                  </thead>
+                  <tbody id="comparison-table-body"></tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
 
         <section class="page" id="page-supplier">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">供应商管理</h2>
+          <div class="no-project-hint" id="supplier-no-project" style="display: none;">
+            <div class="hint-icon">📋</div>
+            <h3>还没有装修项目</h3>
+            <p>请先创建一个装修项目，才能管理供应商信息</p>
+            <button class="btn btn-accent" onclick="App.navigateTo('project')">去创建项目</button>
+          </div>
+          <div id="supplier-main-content" class="page-main-content">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">供应商管理</h2>
+              </div>
+              <div class="suppliers-grid" id="suppliers-grid"></div>
             </div>
-            <div class="suppliers-grid" id="suppliers-grid"></div>
           </div>
         </section>
 
         <section class="page" id="page-export">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">导出中心</h2>
-            </div>
-            <div class="export-buttons">
-              <div class="export-card" id="export-excel-btn">
-                <div class="export-icon">📊</div>
-                <div class="export-title">导出预算清单</div>
-                <div class="export-desc">导出Excel格式的预算清单，包含材料清单、自定义项目和预算汇总</div>
-                <button class="btn btn-primary">导出 Excel</button>
+          <div class="no-project-hint" id="export-no-project" style="display: none;">
+            <div class="hint-icon">📋</div>
+            <h3>还没有装修项目</h3>
+            <p>请先创建一个装修项目，才能导出相关文件</p>
+            <button class="btn btn-accent" onclick="App.navigateTo('project')">去创建项目</button>
+          </div>
+          <div id="export-main-content" class="page-main-content">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">导出中心</h2>
               </div>
-              <div class="export-card" id="export-progress-btn">
-                <div class="export-icon">📋</div>
-                <div class="export-title">导出施工进度报告</div>
-                <div class="export-desc">导出HTML格式的施工进度报告，包含所有阶段详情和现场照片</div>
-                <button class="btn btn-accent">导出 HTML</button>
+              <div class="export-buttons">
+                <div class="export-card" id="export-excel-btn">
+                  <div class="export-icon">📊</div>
+                  <div class="export-title">导出预算清单</div>
+                  <div class="export-desc">导出Excel格式的预算清单，包含材料清单、自定义项目和预算汇总</div>
+                  <button class="btn btn-primary">导出 Excel</button>
+                </div>
+                <div class="export-card" id="export-progress-btn">
+                  <div class="export-icon">📋</div>
+                  <div class="export-title">导出施工进度报告</div>
+                  <div class="export-desc">导出HTML格式的施工进度报告，包含所有阶段详情和现场照片</div>
+                  <button class="btn btn-accent">导出 HTML</button>
+                </div>
+                <div class="export-card" id="export-supplier-btn">
+                  <div class="export-icon">📇</div>
+                  <div class="export-title">导出供应商通讯录</div>
+                  <div class="export-desc">导出Excel格式的各材料供应商联系方式，便于施工队联系</div>
+                  <button class="btn btn-outline">导出通讯录</button>
+                </div>
+                <div class="export-card" id="export-all-btn">
+                  <div class="export-icon">📦</div>
+                  <div class="export-title">打包全部导出</div>
+                  <div class="export-desc">一键打包导出预算清单Excel、进度报告HTML、供应商通讯录，方便直接发送</div>
+                  <button class="btn btn-success">📦 一键打包</button>
+                </div>
               </div>
             </div>
           </div>
@@ -261,7 +343,7 @@
   <div class="modal-overlay" id="custom-item-modal">
     <div class="modal">
       <div class="modal-header">
-        <h2>添加自定义项目</h2>
+        <h2 id="custom-item-modal-title">添加自定义项目</h2>
         <button class="modal-close" onclick="App.closeModal('custom-item-modal')">×</button>
       </div>
       <div class="modal-body">
@@ -364,6 +446,30 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-overlay" id="clone-project-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>复制项目</h2>
+        <button class="modal-close" onclick="App.closeModal('clone-project-modal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">新项目名称</label>
+          <input type="text" class="form-input" id="clone-project-name" placeholder="请输入新项目名称">
+        </div>
+        <div class="form-group" style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
+          <label style="font-size: 12px; color: #666;">💡 将复制：材料使用记录、自定义项目、施工进度、供应商信息</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="App.closeModal('clone-project-modal')">取消</button>
+        <button class="btn btn-accent" id="clone-confirm-btn">确认复制</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
 
   <div class="image-modal" id="image-modal" style="display: none;">
     <img id="modal-image" src="" alt="预览图片">

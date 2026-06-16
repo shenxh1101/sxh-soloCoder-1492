@@ -33,21 +33,21 @@ const Calculator = {
 
   calculateTotalBudget(project, usages, customItems, materials, laborPrice) {
     const materialCost = this.calculateMaterialCost(usages, materials);
-    const laborCost = this.calculateLaborCost(project.area, laborPrice);
+    const laborCost = this.calculateLaborCost((project && project.area) || 0, laborPrice);
     const customCost = this.calculateCustomItemCost(customItems);
     return materialCost + laborCost + customCost;
   },
 
   calculateTotalActual(usages, customItems, project, laborPrice) {
     const actualMaterialCost = this.calculateActualMaterialCost(usages);
-    const laborCost = this.calculateLaborCost(project.area, laborPrice);
+    const laborCost = this.calculateLaborCost((project && project.area) || 0, laborPrice);
     const actualCustomCost = this.calculateActualCustomItemCost(customItems);
     return actualMaterialCost + laborCost + actualCustomCost;
   },
 
   calculateBudgetBreakdown(project, usages, customItems, materials, laborPrice) {
     const materialCost = this.calculateMaterialCost(usages, materials);
-    const laborCost = this.calculateLaborCost(project.area, laborPrice);
+    const laborCost = this.calculateLaborCost((project && project.area) || 0, laborPrice);
     const customCost = this.calculateCustomItemCost(customItems);
     const totalBudget = materialCost + laborCost + customCost;
 
